@@ -28,7 +28,7 @@ setup(
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 5 - Production/Stable',
+        'Development Status :: 3 - Alpha',
 
         # Indicate who your project is intended for
         'Intended Audience :: Developers',
@@ -49,7 +49,7 @@ setup(
     ],
 
     # What does your project relate to?
-    keywords='zip codes',
+    keywords='json api specification neomodel neo4j',
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
@@ -59,14 +59,11 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['haversine'],
+    install_requires=['neomodel', 'py2neo', 'flask', 'hashlib'],
 
     # If there are data files included in your packages that need to be
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
-    #package_data={
-    #    'zipcode': ['zipcode.db'],
-    #},
     include_package_data=True
 
 )
