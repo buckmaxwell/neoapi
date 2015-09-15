@@ -1,4 +1,4 @@
-from .http_error_codes import (OK, CREATED, BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND,
+from http_error_codes import (OK, CREATED, BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND,
                               CONFLICT, INTERNAL_SERVER_ERROR, NOT_ALLOWED)
 from flask import jsonify, make_response
 

@@ -3,10 +3,10 @@ from neomodel import (Property, StructuredNode, StringProperty, DateProperty, Al
                       DeflateError)
 from py2neo.cypher.error.statement import ParameterMissing
 import os
-import .http_error_codes
+import http_error_codes
 from flask import jsonify, make_response
 from neomodel import db
-import .application_codes
+import application_codes
 from .errors import WrongTypeError
 from datetime import datetime
 import hashlib
