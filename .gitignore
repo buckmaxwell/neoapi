@@ -1,1 +1,12 @@
+build
+doc/build
+dist
+*.egg-info
+*.swp
+*.swn
+*.swo
+development.env
 *.pyc
+.idea
+.python-version
+.ropeproject
