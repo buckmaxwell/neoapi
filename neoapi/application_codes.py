@@ -8,6 +8,7 @@ WRONG_TYPE_VIOLATION = '4002', 'the type key does not match the resource request
 PARAMETER_NOT_SUPPORTED_VIOLATION = '4003', 'a query parameter you tried to use is not supported for this endpoint', BAD_REQUEST
 ENUMERATED_TYPE_VIOLATION = '4004', 'a value given for an enumerated type was unsupported', BAD_REQUEST
 BAD_PARAMETER_VIOLATION = '4005', 'one or more of the attributes in your request is not part of the model', BAD_REQUEST
+ATTEMPTED_CARDINALITY_VIOLATION = '4006', 'you tried to do something that would violate a cardinality constraint', BAD_REQUEST
 
 RESOURCE_NOT_FOUND = '4040', 'the requested resource was not found on the server', NOT_FOUND
 
@@ -16,6 +17,9 @@ FORBIDDEN_VIOLATION = '4030', 'the http method you tried is forbidden.', FORBIDD
 UNAUTHORIZED_VIOLATION = '4010', 'missing or bad authorization', UNAUTHORIZED
 BAD_AUTHENTICATION = '4011', 'bad authorization', UNAUTHORIZED
 NO_AUTHENTICATION = '4012', 'no authorization header provided', UNAUTHORIZED
+
+INTERNAL_SERVER_ERROR_VIOLATION = '5000', 'internal server error', INTERNAL_SERVER_ERROR
+MULTIPLE_NODES_WITH_ID_VIOLATION = '5001', 'multiple nodes with the same id', INTERNAL_SERVER_ERROR_VIOLATION
 
 
 def error_response(array_of_application_code_tuples):

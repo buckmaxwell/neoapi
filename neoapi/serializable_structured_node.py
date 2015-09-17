@@ -1,6 +1,6 @@
 from neomodel import (Property, StructuredNode, StringProperty, DateProperty, AliasProperty, UniqueProperty,
                       DateTimeProperty, RelationshipFrom, BooleanProperty, Relationship, DoesNotExist, ZeroOrOne,
-                      DeflateError)
+                      DeflateError, One, ZeroOrMore, OneOrMore, AttemptedCardinalityViolation, MultipleNodesReturned)
 from py2neo.cypher.error.statement import ParameterMissing
 import os
 import http_error_codes
@@ -27,6 +27,7 @@ class SerializableStructuredNode(StructuredNode):
     updated = DateTimeProperty(default=datetime.now())
     created = DateTimeProperty(default=datetime.now())
     active = BooleanProperty(default=True)
+    type = StringProperty(required=True)
 
     def get_self_link(self):
         return '{base_url}/{type}/{id}'.format(base_url=base_url, type=self.type, id=self.id)
@@ -839,6 +840,7 @@ class SerializableStructuredNode(StructuredNode):
 
     @classmethod
     def delete_relationship(cls, id, related_collection_name, related_resource=None):
+        """This method is deprecated for version 1.1.0.  Please use update_relationship"""
         try:
             this_resource = cls.nodes.get(id=id, active=True)
             if not related_resource:
@@ -847,6 +849,55 @@ class SerializableStructuredNode(StructuredNode):
                 r = this_resource.delete_individual_relationship(related_collection_name, related_resource)
         except DoesNotExist:
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
+        return r
+
+    @classmethod
+    def update_relationship(cls, id, related_collection_name, request_json):
+        """
+        Used to completely replace all the existing relationships with new ones.
+
+        :param id: The 'id' field of the node to update in the database.  The id field must be set in the model -- it \
+        is not the same as the node id
+        :param related_collection_name: The name of the relationship
+        :param request_json: a dictionary formatted according to the specification at \
+        http://jsonapi.org/format/#crud-updating-relationships
+        :return: A response according to the same specification
+        """
+        try:
+            this_resource = cls.nodes.get(id=id, active=True)
+            related_collection = getattr(this_resource, related_collection_name)
+            data = request_json['data']
+
+            if type(related_collection) in (One, ZeroOrOne):  # Cardinality <= 1 so is a single obj
+                if not data and related_collection.single():  # disconnect the resource
+                    related_collection.disconnect(related_collection.single())
+                else:
+                    the_new_node = SerializableStructuredNode.nodes.get(type=data['type'], id=data['id'])
+                    if related_collection.single():  # update the relationship
+                        related_collection.reconnect(related_collection.single(), the_new_node)
+                    else:  # create the relationship
+                        related_collection.connect(the_new_node)
+
+            else:  # Cardinality > 1 so this is a collection of objects
+                old_nodes = related_collection.all()
+                for item in old_nodes:  # removes all old connections
+                    related_collection.disconnect(item)
+                for identifier in data:  # adds all new connections
+                    the_new_node = SerializableStructuredNode.nodes.get(type=identifier['type'], id=identifier['id'])
+                    related_collection.connect(the_new_node)
+
+            r = make_response('')
+            r.status_code = http_error_codes.NO_CONTENT
+            r.headers['Content-Type'] = CONTENT_TYPE
+
+        except DoesNotExist:
+            r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
+        except KeyError and TypeError:
+            r = application_codes.error_response([application_codes.BAD_FORMAT_VIOLATION])
+        except AttemptedCardinalityViolation:
+            r = application_codes.error_response([application_codes.ATTEMPTED_CARDINALITY_VIOLATION])
+        except MultipleNodesReturned:
+            r = application_codes.error_response([application_codes.MULTIPLE_NODES_WITH_ID_VIOLATION])
         return r
 
     @classmethod
