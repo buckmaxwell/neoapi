@@ -7,7 +7,7 @@ import http_error_codes
 from flask import jsonify, make_response
 from neomodel import db
 import application_codes
-from .errors import WrongTypeError
+from .errors import WrongTypeError, ParameterNotSupported
 from datetime import datetime
 import hashlib
 
@@ -37,58 +37,11 @@ class SerializableStructuredNode(StructuredNode):
 
     @classmethod
     def resource_collection_response(cls, offset=0, limit=20):
-
-        query = "MATCH (n) WHERE n:{label} AND n.active RETURN n ORDER BY n.id SKIP {offset} LIMIT {limit}".format(
-            label=cls.__name__,
-            offset=offset,
-            limit=limit)
-
-        results, meta = db.cypher_query(query)
-        data = dict()
-        data['data'] = list()
-        data['links'] = dict()
-
-        data['links']['self'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-            class_link=cls.get_class_link(),
-            offset=offset,
-            limit=limit
-        )
-
-        data['links']['first'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-            class_link=cls.get_class_link(),
-            offset=0,
-            limit=limit
-        )
-
-        if int(offset) - int(limit) > 0:
-            data['links']['prev'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-                class_link=cls.get_class_link(),
-                offset=int(offset)-int(limit),
-                limit=limit
-            )
-
-        if len(cls.nodes) > int(offset) + int(limit):
-            data['links']['next'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-                class_link=cls.get_class_link(),
-                offset=int(offset)+int(limit),
-                limit=limit
-            )
-
-        data['links']['last'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-            class_link=cls.get_class_link(),
-            offset=len(cls.nodes) - (len(cls.nodes) % int(limit)),
-            limit=limit
-        )
-
-
-
-        list_of_nodes = [cls.inflate(row[0]) for row in results]
-        for this_node in list_of_nodes:
-            data['data'].append(this_node.get_resource_object())
-        r = make_response(jsonify(data))
-        r.status_code = http_error_codes.OK
-        r.headers['Content-Type'] = CONTENT_TYPE
-        return r
+        """
+        This method is deprecated for version 1.1.0.  Please use get_collection
+        """
+        request_args = {'page[offset]': offset, 'page[limit]': limit}
+        return cls.get_collection(request_args)
 
     def individual_resource_response(self, included=[]):
         data = dict()
@@ -478,36 +431,136 @@ class SerializableStructuredNode(StructuredNode):
         self.save()
 
     @classmethod
+    def get_collection(cls, request_args):
+        r"""
+        Used to fetch a collection of resource object of type 'cls' in response to a GET request\
+        . get_resource_or_collection should only be invoked on a resource when the client specifies a GET request.
+
+        :param request_args: The query parameters supplied with the request.  currently supports page[offset], and \
+        page[limit]. Pagination only applies to collection requests. See http://jsonapi.org/format/#fetching-pagination.
+        :return: An HTTP response object in accordance with the specification at \
+        http://jsonapi.org/format/#fetching-resources
+        """
+        try:
+            if request_args.get('include'):
+                raise ParameterNotSupported
+
+            offset = request_args.get('page[offset]', 0)
+            limit = request_args.get('page[limit]', 20)
+
+            query = "MATCH (n) WHERE n:{label} AND n.active RETURN n ORDER BY n.id SKIP {offset} LIMIT {limit}".format(
+                label=cls.__name__,
+                offset=offset,
+                limit=limit)
+
+            results, meta = db.cypher_query(query)
+            data = dict()
+            data['data'] = list()
+            data['links'] = dict()
+
+            data['links']['self'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
+                class_link=cls.get_class_link(),
+                offset=offset,
+                limit=limit
+            )
+
+            data['links']['first'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
+                class_link=cls.get_class_link(),
+                offset=0,
+                limit=limit
+            )
+
+            if int(offset) - int(limit) > 0:
+                data['links']['prev'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
+                    class_link=cls.get_class_link(),
+                    offset=int(offset)-int(limit),
+                    limit=limit
+                )
+
+            if len(cls.nodes) > int(offset) + int(limit):
+                data['links']['next'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
+                    class_link=cls.get_class_link(),
+                    offset=int(offset)+int(limit),
+                    limit=limit
+                )
+
+            data['links']['last'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
+                class_link=cls.get_class_link(),
+                offset=len(cls.nodes) - (len(cls.nodes) % int(limit)),
+                limit=limit
+            )
+
+            list_of_nodes = [cls.inflate(row[0]) for row in results]
+            for this_node in list_of_nodes:
+                data['data'].append(this_node.get_resource_object())
+            r = make_response(jsonify(data))
+            r.status_code = http_error_codes.OK
+            r.headers['Content-Type'] = CONTENT_TYPE
+            return r
+        except ParameterNotSupported:
+            return application_codes.error_response([application_codes.PARAMETER_NOT_SUPPORTED_VIOLATION])
+
+    @classmethod
+    def get_resource(cls, request_args):
+        r"""
+        Used to fetch a single resource object with the given id in response to a GET request.\
+        get_resource should only be invoked on a resource when the client specifies a GET request.
+
+        :param request_args:
+        :return: The query parameters supplied with the request.  currently supports include.  See \
+        http://jsonapi.org/format/#fetching-includes
+        """
+        this_resource = cls.nodes.get(id=id, active=True)
+
+        try:
+            included = request_args.get('include').split(',')
+        except AttributeError:
+            included = []
+
+        return this_resource.individual_resource_response(included)
+
+    @classmethod
     def get_resource_or_collection(cls, request_args, id=None):
+        r"""
+        This function has multiple behaviors.
+
+        With id specified: Used to fetch a single resource object with the given id in response to a GET request.\
+        get_resource_or_collection should only be invoked on a resource when the client specifies a GET request.
+
+        With id not specified: Used to fetch a collection of resource object of type 'cls' in response to a GET request\
+        . get_resource_or_collection should only be invoked on a resource when the client specifies a GET request.
+
+        :param request_args: The query parameters supplied with the request.  currently supports include, page[offset], \
+        and page[limit]. Pagination only applies to collection requests. See http://jsonapi.org/format/#fetching-pagination and \
+        http://jsonapi.org/format/#fetching-includes
+        :param id: The 'id' field of the node to fetch in the database.  The id field must be set in the model -- it \
+        is not the same as the node id.  If the id is not supplied the full collection will be returned.
+        :return: An HTTP response object in accordance with the specification at \
+        http://jsonapi.org/format/#fetching-resources
+        """
         if id:
             try:
-                this_resource = cls.nodes.get(id=id, active=True)
-
-                try:
-                    included = request_args.get('include').split(',')
-                except:
-                    included = []
-                r = this_resource.individual_resource_response(included)
-
+                r = cls.get_resource(request_args)
             except DoesNotExist:
                 r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
         else:
-            if request_args.get('include'):
-                r = application_codes.error_response([application_codes.PARAMETER_NOT_SUPPORTED_VIOLATION])
-            else:
-
-                try:
-
-                    r = cls.resource_collection_response(
-                        request_args.get('page[offset]', 0),
-                        request_args.get('page[limit]', 20)
-                    )
-                except Exception as e:
-                    print str(type(e)) + str(e)
+            try:
+                r = cls.get_collection(request_args)
+            except Exception as e:
+                print str(type(e)) + str(e)
+                r = application_codes.error_response([application_codes.BAD_FORMAT_VIOLATION])
         return r
 
     @classmethod
     def create_resource(cls, request_json):
+        r"""
+        Used to create a node in the database of type 'cls' in response to a POST request. create_resource should only \
+        be invoked on a resource when the client specifies a POST request.
+
+        :param request_json: a dictionary formatted according to the specification at \
+        http://jsonapi.org/format/#crud-creating
+        :return: An HTTP response object in accordance with the same specification
+        """
         response = dict()
         new_resource, location = None, None
         try:
@@ -627,6 +680,16 @@ class SerializableStructuredNode(StructuredNode):
 
     @classmethod
     def update_resource(cls, request_json, id):
+        r"""
+        Used to update a node in the database of type 'cls' in response to a PATCH request. update_resource should only \
+        be invoked on a resource when the client specifies a PATCH request.
+
+        :param request_json: a dictionary formatted according to the specification at \
+        http://jsonapi.org/format/#crud-updating
+        :param id: The 'id' field of the node to update in the database.  The id field must be set in the model -- it \
+        is not the same as the node id
+        :return: An HTTP response object in accordance with the same specification
+        """
         response = dict()
         try:
             this_resource = cls.nodes.get(id=id, active=True)
@@ -727,11 +790,23 @@ class SerializableStructuredNode(StructuredNode):
 
     @classmethod
     def set_resource_inactive(cls, id):
+        """This method is deprecated for version 1.1.0.  Please use deactivate_resource"""
+        return cls.deactivate_resource(cls, id)
+
+    @classmethod
+    def deactivate_resource(cls, id):
+        r"""
+        Used to deactivate a node of type 'cls' in response to a DELETE request. deactivate_resource should only \
+        be invoked on a resource when the client specifies a DELETE request.
+
+        :param id: The 'id' field of the node to update in the database.  The id field must be set in the model -- it \
+        is not the same as the node id
+        :return: An HTTP response object in accordance with the specification at \
+        http://jsonapi.org/format/#crud-deleting
+        """
         try:
             this_resource = cls.nodes.get(id=id, active=True)
             this_resource.deactivate()
-            #this_resource.active = False
-            #this_resource.save()
             r = make_response('')
             r.headers['Content-Type'] = "application/vnd.api+json; charset=utf-8"
             r.status_code = http_error_codes.NO_CONTENT
