@@ -1,6 +1,5 @@
 Changelog
 MANIFEST.in
-README.rst
 setup.cfg
 setup.py
 neoapi/__init__.py
