@@ -863,14 +863,20 @@ class SerializableStructuredNode(StructuredNode):
                 r = application_codes.error_response([application_codes.FORBIDDEN_VIOLATION])
             else:
                 data = request_json['data']
-                the_new_node = SerializableStructuredNode.nodes.get(type=data['type'], id=data['id'])
-                # TODO: Add the_new_node in a loop because there can be multiple
-                # TODO: Add support for meta attribute in each rel in the loop
-                related_collection.connect(the_new_node, {})
-                r = this_resource.individual_relationship_response(related_collection_name, data['type'])
+                for rsrc_identifier in data:
+                    the_new_node = SerializableStructuredNode.nodes.get(
+                        type=rsrc_identifier['type'], id=rsrc_identifier['id']
+                    )
+                    rel_attrs = rsrc_identifier.get('meta')
+                    if isinstance(rel_attrs, dict):
+                        related_collection.connect(the_new_node, rel_attrs)
+                    else:
+                        raise WrongTypeError
+                r = this_resource.relationship_collection_response(related_collection_name)
+
         except DoesNotExist:
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
-        except (KeyError, TypeError):
+        except (KeyError, TypeError, WrongTypeError):
             r = application_codes.error_response([application_codes.BAD_FORMAT_VIOLATION])
         except AttemptedCardinalityViolation:
             r = application_codes.error_response([application_codes.ATTEMPTED_CARDINALITY_VIOLATION])
