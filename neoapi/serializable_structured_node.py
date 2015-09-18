@@ -864,9 +864,10 @@ class SerializableStructuredNode(StructuredNode):
             else:
                 data = request_json['data']
                 the_new_node = SerializableStructuredNode.nodes.get(type=data['type'], id=data['id'])
-                rel = related_collection.connect(the_new_node)
-                #TODO: r = rel.get_resource_identifier_object()  # return a response that represents the relationship
-
+                # TODO: Add the_new_node in a loop because there can be multiple
+                # TODO: Add support for meta attribute in each rel in the loop
+                related_collection.connect(the_new_node, {})
+                r = this_resource.individual_relationship_response(related_collection_name, data['type'])
         except DoesNotExist:
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
         except (KeyError, TypeError):
