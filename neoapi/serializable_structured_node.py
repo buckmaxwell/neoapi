@@ -1,6 +1,7 @@
 from neomodel import (Property, StructuredNode, StringProperty, DateProperty, AliasProperty, UniqueProperty,
                       DateTimeProperty, RelationshipFrom, BooleanProperty, Relationship, DoesNotExist, ZeroOrOne,
-                      DeflateError, One, ZeroOrMore, OneOrMore, AttemptedCardinalityViolation, MultipleNodesReturned)
+                      DeflateError, One, ZeroOrMore, OneOrMore, AttemptedCardinalityViolation, MultipleNodesReturned,
+                      StructuredRel)
 from py2neo.cypher.error.statement import ParameterMissing
 import os
 import http_error_codes
@@ -187,23 +188,27 @@ class SerializableStructuredNode(StructuredNode):
                 related_collection_type=related_collection_type)).get('relation_type')
 
             results, columns = self.cypher(
-                "START a=node({self}) MATCH a-[:{relation_type}]-(b) RETURN b SKIP {offset} LIMIT {limit}".format(
+                "START a=node({self}) MATCH a-[rel:{relation_type}]-(end_node) RETURN rel,end_node SKIP {offset} LIMIT {limit}".format(
                     self=self._id, relation_type=relation_type, offset=offset, limit=limit
                 )
             )
-            related_node_or_nodes = [self.inflate(row[0]) for row in results]
 
-            if not eval("type(self.{related_collection_type})".format(related_collection_type=related_collection_type)) == ZeroOrOne:
+            relationships = [row["rel"] for row in results]
+            related_node_or_nodes = [self.inflate(row["end_node"]) for row in results]
+
+            if not type(getattr(self, related_collection_type)) == ZeroOrOne:
                 response['data'] = list()
-                for the_node in related_node_or_nodes:
+                for i, the_node in enumerate(related_node_or_nodes):
                     if the_node.active:
-                        response['data'].append({'type': the_node.type, 'id': the_node.id})
+                        response['data'].append(relationships[i].get_resource_identifier_object())
                         response['included'].append(the_node.get_resource_object())
             elif related_node_or_nodes:
+                #TODO: Determine if this is necessary or should throw an error
                 the_node = related_node_or_nodes[0]
                 response['data'] = {'type': the_node.type, 'id': the_node.id}
                 response['included'].append(the_node.get_resource_object())
             else:
+                #TODO: Determine if this is necessary or should throw an error
                 response['data'] = None
 
             r = make_response(jsonify(response))
@@ -395,36 +400,47 @@ class SerializableStructuredNode(StructuredNode):
         return r
 
     def individual_relationship_response(self, related_collection_type, related_resource, included=[]):
-        response = dict()
-        response['links'] = {
-            'self': '{base_url}/{type}/{id}/relationships/{related_collection_type}/{related_resource}'.format(
-                                                                            base_url=base_url,
-                                                                            type=self.type,
-                                                                            id=self.id,
-                                                                            related_collection_type=related_collection_type,
-                                                                            related_resource=related_resource),
-            'related': '{base_url}/{type}/{id}/{related_collection_type}/{related_resource}'.format(
-                                                        base_url=base_url,
-                                                        type=self.type,
-                                                        id=self.id,
-                                                        related_collection_type=related_collection_type,
-                                                        related_resource=related_resource)
-        }
+        try:
+            response = dict()
+            response['data'] = dict()
+            response['included'] = list()
+            response['links'] = {
+                'self': '{base_url}/{type}/{id}/relationships/{related_collection_type}/{related_resource}'.format(
+                                                                                base_url=base_url,
+                                                                                type=self.type,
+                                                                                id=self.id,
+                                                                                related_collection_type=related_collection_type,
+                                                                                related_resource=related_resource),
+                'related': '{base_url}/{type}/{id}/{related_collection_type}/{related_resource}'.format(
+                                                            base_url=base_url,
+                                                            type=self.type,
+                                                            id=self.id,
+                                                            related_collection_type=related_collection_type,
+                                                            related_resource=related_resource)
+            }
 
-        # data
-        related_node_or_nodes = eval('self.{related_collection_type}.search(id=related_resource)'.format(related_collection_type=related_collection_type), )
+            # data
+            relation_type = eval('self.{related_collection_type}.definition'.format(
+                related_collection_type=related_collection_type)).get('relation_type')
 
-        if len(related_node_or_nodes) == 1:
-            the_node = related_node_or_nodes[0]
-            response['data'] = {'type': the_node.type, 'id': the_node.id}
-            response['included'] = [the_node.get_resource_object()] + the_node.get_included_from_list(included)
+            results, columns = self.cypher(
+                "START a=node({self}) MATCH a-[rel:{relation_type}]-(end_node) RETURN rel, end_node".format(
+                    self=self._id, relation_type=relation_type
+                )
+            )
+            if len(results) == 1:
+                relationship = results[0]["rel"]
+                the_node = self.inflate(results[0]["end_node"])
+                if the_node.active:
+                    response['data'] = relationship.get_resource_identifier_object()
+                    response['included'].append(the_node.get_resource_object())
+            else:
+                raise DoesNotExist
             r = make_response(jsonify(response))
             r.status_code = http_error_codes.OK
             r.headers['Content-Type'] = CONTENT_TYPE
-        else:
-            response['data'] = None
+        except (AttributeError, DoesNotExist):
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
-
         return r
 
     def deactivate(self):
@@ -839,6 +855,29 @@ class SerializableStructuredNode(StructuredNode):
         return r
 
     @classmethod
+    def create_relationship(cls, id, related_collection_name, request_json):
+        try:
+            this_resource = cls.nodes.get(id=id, active=True)
+            related_collection = getattr(this_resource, related_collection_name)
+            if type(related_collection) in (One, ZeroOrOne):  # Cardinality <= 1 so update_relationship should be used
+                r = application_codes.error_response([application_codes.FORBIDDEN_VIOLATION])
+            else:
+                data = request_json['data']
+                the_new_node = SerializableStructuredNode.nodes.get(type=data['type'], id=data['id'])
+                rel = related_collection.connect(the_new_node)
+                #TODO: r = rel.get_resource_identifier_object()  # return a response that represents the relationship
+
+        except DoesNotExist:
+            r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
+        except (KeyError, TypeError):
+            r = application_codes.error_response([application_codes.BAD_FORMAT_VIOLATION])
+        except AttemptedCardinalityViolation:
+            r = application_codes.error_response([application_codes.ATTEMPTED_CARDINALITY_VIOLATION])
+        except MultipleNodesReturned:
+            r = application_codes.error_response([application_codes.MULTIPLE_NODES_WITH_ID_VIOLATION])
+        return r
+
+    @classmethod
     def delete_relationship(cls, id, related_collection_name, related_resource=None):
         """This method is deprecated for version 1.1.0.  Please use update_relationship"""
         try:
@@ -892,7 +931,7 @@ class SerializableStructuredNode(StructuredNode):
 
         except DoesNotExist:
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
-        except KeyError and TypeError:
+        except (KeyError, TypeError):
             r = application_codes.error_response([application_codes.BAD_FORMAT_VIOLATION])
         except AttemptedCardinalityViolation:
             r = application_codes.error_response([application_codes.ATTEMPTED_CARDINALITY_VIOLATION])
@@ -945,6 +984,28 @@ class SerializableStructuredNode(StructuredNode):
 class EnumeratedTypeError(Exception):
     pass
 
+
+class SerializableStructuredRel(StructuredRel):
+    r"""
+    The Base Relationship that all Structured Relationships must inherit from.  All relationships should be structured \
+    starting version 1.1.0 -- okay to use model=SerializableStructuredRel
+    """
+    secret = []
+    updated = DateTimeProperty(default=datetime.now())
+    created = DateTimeProperty(default=datetime.now())
+
+    def get_resource_identifier_object(self):
+        response = dict()
+        response['id'] = self.end_node().id
+        response['type'] = self.end_node().type
+        response['meta'] = dict()
+
+        props = self.defined_properties()
+        for attr_name in props.keys():
+            if attr_name not in self.secret:
+                response['meta'][attr_name] = getattr(self, attr_name)
+
+        return response
 
 
 
