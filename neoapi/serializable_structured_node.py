@@ -203,12 +203,12 @@ class SerializableStructuredNode(StructuredNode):
                         response['data'].append(relationships[i].get_resource_identifier_object())
                         response['included'].append(the_node.get_resource_object())
             elif related_node_or_nodes:
-                #TODO: Determine if this is necessary or should throw an error
+                # TODO: Determine if this is necessary or should throw an error
                 the_node = related_node_or_nodes[0]
                 response['data'] = {'type': the_node.type, 'id': the_node.id}
                 response['included'].append(the_node.get_resource_object())
             else:
-                #TODO: Determine if this is necessary or should throw an error
+                # TODO: Determine if this is necessary or should throw an error
                 response['data'] = None
 
             r = make_response(jsonify(response))
@@ -539,6 +539,8 @@ class SerializableStructuredNode(StructuredNode):
     @classmethod
     def get_resource_or_collection(cls, request_args, id=None):
         r"""
+        Deprecated for version 1.1.0. Please use get_resource or get_collection.
+
         This function has multiple behaviors.
 
         With id specified: Used to fetch a single resource object with the given id in response to a GET request.\
@@ -834,9 +836,18 @@ class SerializableStructuredNode(StructuredNode):
 
     @classmethod
     def get_relationship(cls, request_args, id, related_collection_name, related_resource=None):
+        """
+        Get a relationship
+        :param request_args:
+        :param id: The 'id' field of the node on the left side of the relationship in the database.  The id field must \
+        be set in the model -- it is not the same as the node id
+        :param related_collection_name: The name of the relationship
+        :param related_resource: Deprecated for version 1.1.0
+        :return: A response according to the specification at http://jsonapi.org/format/#fetching-relationships
+        """
         try:
             included = request_args.get('include').split(',')
-        except:
+        except SyntaxError:
             included = []
         try:
             offset = request_args.get('page[offset]', 0)
@@ -847,7 +858,7 @@ class SerializableStructuredNode(StructuredNode):
                     r = application_codes.error_response([application_codes.PARAMETER_NOT_SUPPORTED_VIOLATION])
                 else:
                     r = this_resource.relationship_collection_response(related_collection_name, offset, limit)
-            else:
+            else:  # deprecated for version 1.1.0
                 r = this_resource.individual_relationship_response(related_collection_name, related_resource, included)
 
         except DoesNotExist:
@@ -855,7 +866,18 @@ class SerializableStructuredNode(StructuredNode):
         return r
 
     @classmethod
-    def create_relationship(cls, id, related_collection_name, request_json):
+    def create_relationships(cls, id, related_collection_name, request_json):
+        r"""
+        Used to create relationship(s) between the id node and the nodes identified in the included resource \
+        identifier objects.
+
+        :param id: The 'id' field of the node on the left side of the relationship in the database.  The id field must \
+        be set in the model -- it is not the same as the node id
+        :param related_collection_name: The name of the relationship
+        :param request_json: request_json: a dictionary formatted according to the specification at \
+        http://jsonapi.org/format/#crud-updating-relationships
+        :return: A response according to the same specification
+        """
         try:
             this_resource = cls.nodes.get(id=id, active=True)
             related_collection = getattr(this_resource, related_collection_name)
@@ -885,8 +907,44 @@ class SerializableStructuredNode(StructuredNode):
         return r
 
     @classmethod
+    def disconnect_relationship(cls, id, related_collection_name, request_json):
+        """
+        Disconnect one or more relationship in a collection with cardinality 'Many'.
+
+        :param id: The 'id' field of the node on the left side of the relationship in the database.  The id field must \
+        be set in the model -- it is not the same as the node id
+        :param related_collection_name: The name of the relationship
+        :param request_json: a dictionary formatted according to the specification at \
+        http://jsonapi.org/format/#crud-updating-relationships
+        :return: A response according to the same specification
+        """
+        try:
+            this_resource = cls.nodes.get(id=id, active=True)
+            related_collection = getattr(this_resource, related_collection_name)
+            rsrc_identifier_list = request_json['data']
+            if not isinstance(rsrc_identifier_list, list):
+                raise WrongTypeError
+
+            for rsrc_identifier in rsrc_identifier_list:
+                connected_resource = SerializableStructuredNode.nodes.get(
+                    type=rsrc_identifier['type'],
+                    id=rsrc_identifier['id']
+                )
+                related_collection.disconnect(connected_resource)
+            r = make_response('')
+            r.status_code = http_error_codes.NO_CONTENT
+            r.headers['Content-Type'] = CONTENT_TYPE
+        except DoesNotExist:
+            r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
+        except (KeyError, WrongTypeError):
+            r = application_codes.error_response([application_codes.BAD_FORMAT_VIOLATION])
+        return r
+
+    @classmethod
     def delete_relationship(cls, id, related_collection_name, related_resource=None):
-        """This method is deprecated for version 1.1.0.  Please use update_relationship"""
+        """
+        Deprecated for version 1.1.0.  Please use update_relationship
+        """
         try:
             this_resource = cls.nodes.get(id=id, active=True)
             if not related_resource:
@@ -899,11 +957,11 @@ class SerializableStructuredNode(StructuredNode):
 
     @classmethod
     def update_relationship(cls, id, related_collection_name, request_json):
-        """
+        r"""
         Used to completely replace all the existing relationships with new ones.
 
-        :param id: The 'id' field of the node to update in the database.  The id field must be set in the model -- it \
-        is not the same as the node id
+        :param id: The 'id' field of the node on the left side of the relationship in the database.  The id field must \
+        be set in the model -- it is not the same as the node id
         :param related_collection_name: The name of the relationship
         :param request_json: a dictionary formatted according to the specification at \
         http://jsonapi.org/format/#crud-updating-relationships
