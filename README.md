@@ -17,12 +17,9 @@ Thats all!
 ## Getting Started
 
 To get started with NeoAPI it makes sense to familiarize yourself with 
-[NeoModel](http://neomodel.readthedocs.org/en/latest/) and [the json api specification](http://jsonapi.org/).  
-These are the two technologies NeoAPI is built on.  
+[NeoModel](http://neomodel.readthedocs.org/en/latest/) and [the json api specification](http://jsonapi.org/). These are the two technologies NeoAPI is built on.  
 
-Chances are though, you want to get started right now!! If that's the case, please check out our 
-[sample project](https://github.com/buckmaxwell/sample-neo-api), and Overview.md.  Together those resources should be 
-the jetpack you need.
+Chances are though, you want to get started right now!! If that's the case, please check out our [sample project](https://github.com/buckmaxwell/sample-neo-api), and Overview.md.  Together those resources should be the jetpack you need.
 
 If you get stuck, do the reading I suggested above, or drop me an email at maxbuckdeveloper@gmail.com, I'm always happy
 to help.
