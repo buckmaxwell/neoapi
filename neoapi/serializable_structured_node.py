@@ -12,7 +12,7 @@ from .errors import WrongTypeError, ParameterNotSupported
 from datetime import datetime
 import hashlib
 
-base_url = os.environ.get('BASE_API_URL', 'http://localhost:5000/v1')
+base_url = os.environ.get('BASE_API_URL', 'http://localhost:10200/v1')
 CONTENT_TYPE = "application/vnd.api+json; charset=utf-8"
 
 
@@ -28,14 +28,15 @@ class SerializableStructuredNode(StructuredNode):
     updated = DateTimeProperty(default=datetime.now())
     created = DateTimeProperty(default=datetime.now())
     active = BooleanProperty(default=True)
-    type = StringProperty(required=True)
+    type = StringProperty(default='serializable_structured_nodes')
+    id = StringProperty(required=True, unique_index=True)
 
     def get_self_link(self):
         return '{base_url}/{type}/{id}'.format(base_url=base_url, type=self.type, id=self.id)
 
     @classmethod
     def get_class_link(cls):
-        return '{base_url}/{type}'.format(base_url=base_url, type=cls.type)
+        return '{base_url}/{type}'.format(base_url=base_url, type=cls.__type__)
 
     @classmethod
     def resource_collection_response(cls, offset=0, limit=20):
@@ -110,14 +111,22 @@ class SerializableStructuredNode(StructuredNode):
                 # data
                 related_node_or_nodes = eval('self.{attr_name}.all()'.format(attr_name=attr_name))
 
+
                 if not eval("type(self.{related_collection_type})".format(related_collection_type=attr_name)) == ZeroOrOne:
                     response['relationships'][attr_name]['data'] = list()
                     for the_node in related_node_or_nodes:
                         if the_node.active:
-                            response['relationships'][attr_name]['data'].append({'type': the_node.type, 'id': the_node.id})
+                            # TODO: Decide whether or not to include relationship meta info
+                            # x = getattr(self, attr_name)
+                            # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
+                            rsrc_identifier = {'id': the_node.id, 'type': the_node.type}
+                            response['relationships'][attr_name]['data'].append(rsrc_identifier)
                 elif related_node_or_nodes:
                     the_node = related_node_or_nodes[0]
-                    response['relationships'][attr_name]['data'] = {'type': the_node.type, 'id': the_node.id}
+                    # x = getattr(self, attr_name)
+                    # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
+                    rsrc_identifier = {'type': the_node.type, 'id': the_node.id}
+                    response['relationships'][attr_name]['data'] = rsrc_identifier
                 else:
                     response['relationships'][attr_name]['data'] = None
 
@@ -193,22 +202,24 @@ class SerializableStructuredNode(StructuredNode):
                 )
             )
 
-            relationships = [row["rel"] for row in results]
+            # TODO: For line below SerializableStructuredRel must be set to specific rel model type
+
+            relclass = SerializableStructuredRel.get_relclass_from_type(results[0][0]['type'])
+            relationships = [relclass.inflate(row["rel"]) for row in results]
             related_node_or_nodes = [self.inflate(row["end_node"]) for row in results]
 
             if not type(getattr(self, related_collection_type)) == ZeroOrOne:
                 response['data'] = list()
                 for i, the_node in enumerate(related_node_or_nodes):
                     if the_node.active:
-                        response['data'].append(relationships[i].get_resource_identifier_object())
+                        response['data'].append(relationships[i].get_resource_identifier_object(the_node))
                         response['included'].append(the_node.get_resource_object())
-            elif related_node_or_nodes:
-                # TODO: Determine if this is necessary or should throw an error
+            elif related_node_or_nodes:  # The collection contains 1 item
                 the_node = related_node_or_nodes[0]
                 response['data'] = {'type': the_node.type, 'id': the_node.id}
+                response['data'] = relationships[0].get_resource_identifier_object(the_node)
                 response['included'].append(the_node.get_resource_object())
-            else:
-                # TODO: Determine if this is necessary or should throw an error
+            else:  # The collection is has Cardinality ZeroOrOne and is zero, so null
                 response['data'] = None
 
             r = make_response(jsonify(response))
@@ -432,7 +443,7 @@ class SerializableStructuredNode(StructuredNode):
                 relationship = results[0]["rel"]
                 the_node = self.inflate(results[0]["end_node"])
                 if the_node.active:
-                    response['data'] = relationship.get_resource_identifier_object()
+                    response['data'] = relationship.get_resource_identifier_object(the_node)
                     response['included'].append(the_node.get_resource_object())
             else:
                 raise DoesNotExist
@@ -503,7 +514,7 @@ class SerializableStructuredNode(StructuredNode):
 
             data['links']['last'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
                 class_link=cls.get_class_link(),
-                offset=len(cls.nodes) - (len(cls.nodes) % int(limit)),
+                offset=len(cls.nodes.filter(active=True)) - (len(cls.nodes.filter(active=True)) % int(limit))-1,
                 limit=limit
             )
 
@@ -518,7 +529,7 @@ class SerializableStructuredNode(StructuredNode):
             return application_codes.error_response([application_codes.PARAMETER_NOT_SUPPORTED_VIOLATION])
 
     @classmethod
-    def get_resource(cls, request_args):
+    def get_resource(cls, request_args, id):
         r"""
         Used to fetch a single resource object with the given id in response to a GET request.\
         get_resource should only be invoked on a resource when the client specifies a GET request.
@@ -527,14 +538,19 @@ class SerializableStructuredNode(StructuredNode):
         :return: The query parameters supplied with the request.  currently supports include.  See \
         http://jsonapi.org/format/#fetching-includes
         """
-        this_resource = cls.nodes.get(id=id, active=True)
-
         try:
-            included = request_args.get('include').split(',')
-        except AttributeError:
-            included = []
+            this_resource = cls.nodes.get(id=id, active=True)
 
-        return this_resource.individual_resource_response(included)
+            try:
+                included = request_args.get('include').split(',')
+            except AttributeError:
+                included = []
+
+            r = this_resource.individual_resource_response(included)
+        except DoesNotExist:
+            r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
+
+        return r
 
     @classmethod
     def get_resource_or_collection(cls, request_args, id=None):
@@ -566,7 +582,6 @@ class SerializableStructuredNode(StructuredNode):
             try:
                 r = cls.get_collection(request_args)
             except Exception as e:
-                print str(type(e)) + str(e)
                 r = application_codes.error_response([application_codes.BAD_FORMAT_VIOLATION])
         return r
 
@@ -584,7 +599,7 @@ class SerializableStructuredNode(StructuredNode):
         new_resource, location = None, None
         try:
             data = request_json['data']
-            if data['type'] != cls.type:
+            if data['type'] != cls.__type__:
                 raise WrongTypeError('type must match the type of the resource being created.')
 
             attributes = data.get('attributes')
@@ -625,7 +640,8 @@ class SerializableStructuredNode(StructuredNode):
                                 the_id = relation['id']
                                 the_class = cls.get_class_from_type(the_type)
                                 new_resources_relation = the_class.nodes.get(id=the_id, active=True)
-                                eval('new_resource.{relation_name}.connect(new_resources_relation)'.format(
+                                meta = relation.get('meta')
+                                eval('new_resource.{relation_name}.connect(new_resources_relation, meta)'.format(
                                     relation_name=relation_name)
                                 )
                                 new_resource.save()
@@ -635,7 +651,8 @@ class SerializableStructuredNode(StructuredNode):
                             the_id = relation['id']
                             the_class = cls.get_class_from_type(the_type)
                             new_resources_relation = the_class.nodes.get(id=the_id, active=True)
-                            eval('new_resource.{relation_name}.connect(new_resources_relation)'.format(
+                            meta = relation.get('meta')
+                            eval('new_resource.{relation_name}.connect(new_resources_relation, meta)'.format(
                                 relation_name=relation_name)
                             )
                             new_resource.save()
@@ -713,7 +730,7 @@ class SerializableStructuredNode(StructuredNode):
         try:
             this_resource = cls.nodes.get(id=id, active=True)
             data = request_json['data']
-            if data['type'] != cls.type:
+            if data['type'] != cls.__type__:
                 raise WrongTypeError('type must match the type of the resource being updated.')
 
             attributes = data.get('attributes')
@@ -761,16 +778,20 @@ class SerializableStructuredNode(StructuredNode):
                                 the_id = relation['id']
                                 the_class = cls.get_class_from_type(the_type)
                                 new_resources_relation = the_class.nodes.get(id=the_id, active=True)
-                                eval('this_resource.{relation_name}.connect(new_resources_relation)'.format(
-                                    relation_name=relation_name)
+                                meta = relation.get('meta')
+                                the_rel = eval(
+                                    'this_resource.{relation_name}.connect(new_resources_relation, meta)'.format(
+                                        relation_name=relation_name
+                                    )
                                 )
                         else:
                             relation = relations
+                            meta = relation.get('meta')
                             the_type = relation['type']
                             the_id = relation['id']
                             the_class = cls.get_class_from_type(the_type)
                             new_resources_relation = the_class.nodes.get(id=the_id, active=True)
-                            eval('this_resource.{relation_name}.connect(new_resources_relation)'.format(
+                            eval('this_resource.{relation_name}.connect(new_resources_relation, meta)'.format(
                                 relation_name=relation_name)
                             )
                 this_resource.updated = datetime.now()
@@ -847,7 +868,7 @@ class SerializableStructuredNode(StructuredNode):
         """
         try:
             included = request_args.get('include').split(',')
-        except SyntaxError:
+        except (SyntaxError, AttributeError):
             included = []
         try:
             offset = request_args.get('page[offset]', 0)
@@ -886,15 +907,16 @@ class SerializableStructuredNode(StructuredNode):
             else:
                 data = request_json['data']
                 for rsrc_identifier in data:
-                    the_new_node = SerializableStructuredNode.nodes.get(
-                        type=rsrc_identifier['type'], id=rsrc_identifier['id']
-                    )
+                    the_new_node = cls.get_class_from_type(rsrc_identifier['type']).nodes.get(id=rsrc_identifier['id'])
                     rel_attrs = rsrc_identifier.get('meta')
-                    if isinstance(rel_attrs, dict):
+                    if not rel_attrs or isinstance(rel_attrs, dict):
                         related_collection.connect(the_new_node, rel_attrs)
                     else:
                         raise WrongTypeError
-                r = this_resource.relationship_collection_response(related_collection_name)
+                #r = this_resource.relationship_collection_response(related_collection_name)
+                r = make_response('')
+                r.status_code = http_error_codes.NO_CONTENT
+                r.headers['Content-Type'] = CONTENT_TYPE
 
         except DoesNotExist:
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
@@ -926,8 +948,7 @@ class SerializableStructuredNode(StructuredNode):
                 raise WrongTypeError
 
             for rsrc_identifier in rsrc_identifier_list:
-                connected_resource = SerializableStructuredNode.nodes.get(
-                    type=rsrc_identifier['type'],
+                connected_resource = cls.get_class_from_type(rsrc_identifier['type']).nodes.get(
                     id=rsrc_identifier['id']
                 )
                 related_collection.disconnect(connected_resource)
@@ -975,20 +996,36 @@ class SerializableStructuredNode(StructuredNode):
             if type(related_collection) in (One, ZeroOrOne):  # Cardinality <= 1 so is a single obj
                 if not data and related_collection.single():  # disconnect the resource
                     related_collection.disconnect(related_collection.single())
+                elif not data:
+                    pass  # There is already no connected resource
                 else:
-                    the_new_node = SerializableStructuredNode.nodes.get(type=data['type'], id=data['id'])
+                    the_new_node = cls.get_class_from_type(data['type']).nodes.get(id=data['id'])
                     if related_collection.single():  # update the relationship
                         related_collection.reconnect(related_collection.single(), the_new_node)
+                        the_rel = eval('related_collection.relationship(the_new_node)'.format(
+                            start_node=this_resource, relname=related_collection_name)
+                        )
+                        meta = data.get('meta')
+                        if meta:
+                            for k in meta.keys():
+                                setattr(the_rel, k, meta[k])
+                        the_rel.save()
+
                     else:  # create the relationship
-                        related_collection.connect(the_new_node)
+                        related_collection.connect(the_new_node, data.get('meta'))
 
             else:  # Cardinality > 1 so this is a collection of objects
                 old_nodes = related_collection.all()
                 for item in old_nodes:  # removes all old connections
                     related_collection.disconnect(item)
                 for identifier in data:  # adds all new connections
-                    the_new_node = SerializableStructuredNode.nodes.get(type=identifier['type'], id=identifier['id'])
-                    related_collection.connect(the_new_node)
+                    the_new_node = cls.get_class_from_type(identifier['type']).nodes.get(id=identifier['id'])
+                    the_rel = related_collection.connect(the_new_node)
+                    meta = identifier.get('meta')
+                    if meta:
+                        for k in meta.keys():
+                            setattr(the_rel, k, meta[k])
+                    the_rel.save()
 
             r = make_response('')
             r.status_code = http_error_codes.NO_CONTENT
@@ -1041,7 +1078,7 @@ class SerializableStructuredNode(StructuredNode):
     @classmethod
     def get_class_from_type(cls, the_type):
         for the_cls in cls.__base__.__subclasses__():
-            if the_cls.type == the_type:
+            if the_cls.__type__ == the_type:
                 return the_cls
         return None
 
@@ -1058,19 +1095,33 @@ class SerializableStructuredRel(StructuredRel):
     secret = []
     updated = DateTimeProperty(default=datetime.now())
     created = DateTimeProperty(default=datetime.now())
+    type = StringProperty(default="serializable_structured_rel")
 
-    def get_resource_identifier_object(self):
-        response = dict()
-        response['id'] = self.end_node().id
-        response['type'] = self.end_node().type
-        response['meta'] = dict()
+    def get_resource_identifier_object(self, end_node):
+        try:
+            response = dict()
+            response['id'] = end_node.id
+            response['type'] = end_node.type
+            response['meta'] = dict()
 
-        props = self.defined_properties()
-        for attr_name in props.keys():
-            if attr_name not in self.secret:
-                response['meta'][attr_name] = getattr(self, attr_name)
+            props = self.defined_properties()
+            print self.__class__
+            for attr_name in props.keys():
+                print attr_name
+                if attr_name not in self.secret:
+                    response['meta'][attr_name] = getattr(self, attr_name)
 
-        return response
+            return response
+        except Exception as e:
+            print type(e), e
+            raise
+
+    @classmethod
+    def get_relclass_from_type(cls, the_type):
+        for the_cls in cls.__subclasses__():
+            if the_cls.__type__ == the_type:
+                return the_cls
+        return None
 
 
 
