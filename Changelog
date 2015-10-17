@@ -1,3 +1,6 @@
+Version 2.0.1 2015-08-17
+ * Small bug fix.  When hashed values are part of a model, but not included in json representation errors were occurring
+
 Version 2.0.0 2015-09-27
  * Some Changes that cause old model format to not work
  * This version is significantly more compliant and functional than the last

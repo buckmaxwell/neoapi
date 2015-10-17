@@ -625,8 +625,9 @@ class SerializableStructuredNode(StructuredNode):
 
                 for r in new_resource.hashed:
                     unhashed = getattr(new_resource, r)
-                    setattr(new_resource, r, hashlib.sha256(unhashed).hexdigest())
-                    new_resource.save()
+                    if unhashed:
+                        setattr(new_resource, r, hashlib.sha256(unhashed).hexdigest())
+                        new_resource.save()
 
             relationships = data.get('relationships')
             if relationships:
