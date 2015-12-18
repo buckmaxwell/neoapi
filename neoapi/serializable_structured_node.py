@@ -470,6 +470,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         :return: An HTTP response object in accordance with the specification at \
         http://jsonapi.org/format/#fetching-resources
         """
+        print cls.get_collection_query(request_args)
         try:
             if request_args.get('include'):
                 raise ParameterNotSupported
@@ -477,10 +478,13 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
             offset = request_args.get('page[offset]', 0)
             limit = request_args.get('page[limit]', 20)
 
+            '''
             query = "MATCH (n) WHERE n:{label} AND n.active RETURN n ORDER BY n.id SKIP {offset} LIMIT {limit}".format(
                 label=cls.__name__,
                 offset=offset,
-                limit=limit)
+                limit=limit)'''
+            query = cls.get_collection_query(request_args)
+            print query
 
             results, meta = db.cypher_query(query)
             data = dict()
