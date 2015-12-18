@@ -11,12 +11,13 @@ import application_codes
 from .errors import WrongTypeError, ParameterNotSupported
 from datetime import datetime
 import hashlib
+from serializable_structured_node_base import SerializableStructuredNodeBase
 
 base_url = os.environ.get('BASE_API_URL', 'http://localhost:10200/v1')
 CONTENT_TYPE = "application/vnd.api+json; charset=utf-8"
 
 
-class SerializableStructuredNode(StructuredNode):
+class SerializableStructuredNode(SerializableStructuredNodeBase):
     """
     This class extends NeoModel's StructuredNode class. It adds a series of functions in order to allow for \
     creation of json responses that conform to the jsonapi specification found at http://jsonapi.org/
