@@ -2,6 +2,7 @@ __author__ = 'max'
 
 from neomodel import StructuredNode
 
+
 class SerializableStructuredNodeBase(StructuredNode):
     """
     Base class for SerializableStructuredNode.
@@ -80,12 +81,19 @@ class SerializableStructuredNodeBase(StructuredNode):
                         result += 'AND n.{k} <= {lte_i}'.format(k=k, lte_i=repr(lte_item.encode('utf8')))
             return result
 
-        def create_order_by_string(arg_dic):
+        def create_order_by_string(cls, arg_dic):
             result = ''  # default is no order by
             if 'sort' in arg_dic:
                 result = 'ORDER BY '
                 for i, x in enumerate(arg_dic['sort']):
-                    if x[0] == '-':
+                    if len(x.split('func(')) == 2:  # grab function if it is a function
+                        the_function = x.split('func(')[1].strip(')')
+                        if the_function[0] == '-':
+                            result += '{fv} DESC'.format(fv=getattr(cls, the_function[1:]))
+                        else:
+                            result += '{fv}'.format(fv=getattr(cls, the_function))
+
+                    elif x[0] == '-':
                         result += 'n.{x} DESC'.format(x=x[1:])
                     else:
                         result += 'n.{x}'.format(x=x)
@@ -103,13 +111,20 @@ class SerializableStructuredNodeBase(StructuredNode):
 
         arg_dic = create_argument_dictionary(request_args)
         filter_string = create_filter_by_string(arg_dic)
-        order_by_string = create_order_by_string(arg_dic)
+        order_by_string = create_order_by_string(cls, arg_dic)
         offset, limit = get_offset_and_limit(arg_dic)
 
-        query = "MATCH (n) WHERE n:{label} AND n.active {filter_string} RETURN n {order_by_string} SKIP {offset} LIMIT {limit}".format(
+        query = """
+        MATCH (n)
+        OPTIONAL MATCH (n)-[r]-()
+        OPTIONAL MATCH (n)<-[r_in]-()
+        OPTIONAL MATCH (n)-[r_out]->()
+        WHERE n:{label} AND n.active {filter_string}
+
+        RETURN n {order_by_string} SKIP {offset} LIMIT {limit}""".format(
             label=cls.__name__,
-            offset=offset,  # TODO: make setable
-            limit=limit,  # TODO: make setable
+            offset=offset,
+            limit=limit,
             filter_string=filter_string,
             order_by_string=order_by_string
         )

@@ -1,3 +1,6 @@
+Version 2.1.1 2015-12-18
+ * Added filtering and sorting, as well as support for sorting on cypher functions defined in the class
+
 Version 2.0.1 2015-08-17
  * Small bug fix.  When hashed values are part of a model, but not included in json representation errors were occurring
 
