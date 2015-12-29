@@ -1,3 +1,6 @@
+Version 2.1.2 2015-12-18
+ * Fixed bug in filtering
+
 Version 2.1.1 2015-12-18
  * Added filtering and sorting, as well as support for sorting on cypher functions defined in the class
 

@@ -54,8 +54,9 @@ class SerializableStructuredNodeBase(StructuredNode):
 
                     gt, gte, lt, lte, et = [], [], [], [], []
                     print arg_dic['filter'][k]
-                    print k
                     for item in arg_dic['filter'][k]:
+                        if not len(item):  # don't bother with an empty item
+                            continue
                         if item[0] == '>':
                             if item[1] == '=':
                                 gte.append(item[2:])
@@ -81,6 +82,33 @@ class SerializableStructuredNodeBase(StructuredNode):
                         result += 'AND n.{k} <= {lte_i}'.format(k=k, lte_i=repr(lte_item.encode('utf8')))
             return result
 
+        def create_return_string(arg_dic):
+            result = 'RETURN distinct(n)'  # => default
+            if 'sort' in arg_dic:
+                result = 'RETURN '
+                for i, x in enumerate(arg_dic['sort']):
+                    if len(x.split('func(')) == 2:  # grab function if it is a function
+                        the_function = x.split('func(')[1].strip(')')
+                        if the_function[0] == '-':
+                            result += '{fv}'.format(fv=getattr(cls, the_function[1:])['ret'])
+                        else:
+                            result += '{fv}'.format(fv=getattr(cls, the_function)['ret'])
+                        if i != len(arg_dic['sort'])-1:
+                            result += ', '
+            return result
+
+        def create_secondary_match(arg_dic):
+            result = ''  # => default
+            if 'sort' in arg_dic:
+                for i, x in enumerate(arg_dic['sort']):
+                    if len(x.split('func(')) == 2:  # grab function if it is a function
+                        the_function = x.split('func(')[1].strip(')')
+                        if the_function[0] == '-':
+                            result += 'OPTIONAL MATCH {fv} '.format(fv=getattr(cls, the_function[1:])['match'])
+                        else:
+                            result += 'OPTIONAL MATCH {fv} '.format(fv=getattr(cls, the_function)['match'])
+            return result
+
         def create_order_by_string(cls, arg_dic):
             result = ''  # default is no order by
             if 'sort' in arg_dic:
@@ -89,9 +117,9 @@ class SerializableStructuredNodeBase(StructuredNode):
                     if len(x.split('func(')) == 2:  # grab function if it is a function
                         the_function = x.split('func(')[1].strip(')')
                         if the_function[0] == '-':
-                            result += '{fv} DESC'.format(fv=getattr(cls, the_function[1:]))
+                            result += '{fv} DESC'.format(fv=getattr(cls, the_function[1:])['order_by'])
                         else:
-                            result += '{fv}'.format(fv=getattr(cls, the_function))
+                            result += '{fv}'.format(fv=getattr(cls, the_function)['order_by'])
 
                     elif x[0] == '-':
                         result += 'n.{x} DESC'.format(x=x[1:])
@@ -112,22 +140,24 @@ class SerializableStructuredNodeBase(StructuredNode):
         arg_dic = create_argument_dictionary(request_args)
         filter_string = create_filter_by_string(arg_dic)
         order_by_string = create_order_by_string(cls, arg_dic)
+        secondary_match = create_secondary_match(arg_dic)
+        return_string = create_return_string(arg_dic)
         offset, limit = get_offset_and_limit(arg_dic)
 
         query = """
-        MATCH (n)
-        OPTIONAL MATCH (n)-[r]-()
-        OPTIONAL MATCH (n)<-[r_in]-()
-        OPTIONAL MATCH (n)-[r_out]->()
-        WHERE n:{label} AND n.active {filter_string}
-
-        RETURN n {order_by_string} SKIP {offset} LIMIT {limit}""".format(
+        MATCH (n) WHERE n:{label}
+        AND n.active {filter_string}
+        {secondary_match}
+        {return_string} {order_by_string} SKIP {offset} LIMIT {limit}""".format(
             label=cls.__name__,
             offset=offset,
             limit=limit,
+            secondary_match=secondary_match,
+            return_string=return_string,
             filter_string=filter_string,
             order_by_string=order_by_string
         )
+
         return query
 
 

@@ -613,8 +613,8 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                     if x in cls.dates:
                         dt = datetime.strptime(attributes[x], '%Y-%m-%d')
                         attributes[x] = dt
-
                 new_resource = cls(**attributes)
+
                 new_resource.save()
 
                 enum_keys = new_resource.enums.keys()
