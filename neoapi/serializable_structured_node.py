@@ -82,18 +82,18 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         return response
 
     def get_resource_object(self, include_relationship_info=False):
-        response = dict()
-        response['id'] = self.id
-        response['type'] = self.type
-        response['attributes'] = dict()
-        response['relationships'] = dict()
+        response = dict(id=self.id,
+                        type=self.type,
+                        attributes=dict())
+
         props = self.defined_properties()
         for attr_name in props.keys():
             if isinstance(props[attr_name], Property):  # is attribute
                 if attr_name not in self.secret:
                     response['attributes'][attr_name] = getattr(self, attr_name)
 
-            else:  # is relationship
+            elif include_relationship_info:  # is relationship
+                response['relationships'] = dict()
                 response['relationships'][attr_name] = dict()
 
                 # links
@@ -113,24 +113,23 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                 # data
                 related_node_or_nodes = eval('self.{attr_name}.all()'.format(attr_name=attr_name))
 
-                if include_relationship_info:
-                    if not eval("type(self.{related_collection_type})".format(related_collection_type=attr_name)) == ZeroOrOne:
-                        response['relationships'][attr_name]['data'] = list()
-                        for the_node in related_node_or_nodes:
-                            if the_node.active:
-                                # TODO: Decide whether or not to include relationship meta info
-                                # x = getattr(self, attr_name)
-                                # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
-                                rsrc_identifier = {'id': the_node.id, 'type': the_node.type}
-                                response['relationships'][attr_name]['data'].append(rsrc_identifier)
-                    elif related_node_or_nodes:
-                        the_node = related_node_or_nodes[0]
-                        # x = getattr(self, attr_name)
-                        # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
-                        rsrc_identifier = {'type': the_node.type, 'id': the_node.id}
-                        response['relationships'][attr_name]['data'] = rsrc_identifier
-                    else:
-                        response['relationships'][attr_name]['data'] = None
+                if not eval("type(self.{related_collection_type})".format(related_collection_type=attr_name)) == ZeroOrOne:
+                    response['relationships'][attr_name]['data'] = list()
+                    for the_node in related_node_or_nodes:
+                        if the_node.active:
+                            # TODO: Decide whether or not to include relationship meta info
+                            # x = getattr(self, attr_name)
+                            # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
+                            rsrc_identifier = {'id': the_node.id, 'type': the_node.type}
+                            response['relationships'][attr_name]['data'].append(rsrc_identifier)
+                elif related_node_or_nodes:
+                    the_node = related_node_or_nodes[0]
+                    # x = getattr(self, attr_name)
+                    # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
+                    rsrc_identifier = {'type': the_node.type, 'id': the_node.id}
+                    response['relationships'][attr_name]['data'] = rsrc_identifier
+                else:
+                    response['relationships'][attr_name]['data'] = None
 
         return response
 
@@ -479,18 +478,17 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
             offset = request_args.get('page[offset]', 0)
             limit = request_args.get('page[limit]', 20)
 
-            '''
-            query = "MATCH (n) WHERE n:{label} AND n.active RETURN n ORDER BY n.id SKIP {offset} LIMIT {limit}".format(
-                label=cls.__name__,
-                offset=offset,
-                limit=limit)'''
             query = cls.get_collection_query(request_args)
             print query
 
             results, meta = db.cypher_query(query)
+
             data = dict()
             data['data'] = list()
             data['links'] = dict()
+
+            # TODO: PROVIDING PAGINATION LINKS WAS TOO SLOW.  REMOVE FOR NOW.  REQUESTING PAGINATION STILL WORKS
+            """
 
             data['links']['self'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
                 class_link=cls.get_class_link(),
@@ -522,11 +520,13 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                 class_link=cls.get_class_link(),
                 offset=len(cls.nodes.filter(active=True)) - (len(cls.nodes.filter(active=True)) % int(limit))-1,
                 limit=limit
-            )
+            )"""
 
             list_of_nodes = [cls.inflate(row[0]) for row in results]
+
             for this_node in list_of_nodes:
                 data['data'].append(this_node.get_resource_object())
+
             r = make_response(jsonify(data))
             r.status_code = http_error_codes.OK
             r.headers['Content-Type'] = CONTENT_TYPE
