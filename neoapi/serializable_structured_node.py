@@ -49,7 +49,8 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
 
     def individual_resource_response(self, included=[]):
         data = dict()
-        data['data'] = self.get_resource_object()
+        include_rel_info = True
+        data['data'] = self.get_resource_object(include_rel_info)
         data['links'] = {'self': self.get_self_link()}
         data['included'] = self.get_included_from_list(included)
         r = make_response(jsonify(data))
@@ -80,7 +81,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
 
         return response
 
-    def get_resource_object(self):
+    def get_resource_object(self, include_relationship_info=False):
         response = dict()
         response['id'] = self.id
         response['type'] = self.type
@@ -88,7 +89,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         response['relationships'] = dict()
         props = self.defined_properties()
         for attr_name in props.keys():
-            if isinstance(props[attr_name], Property): # is attribute
+            if isinstance(props[attr_name], Property):  # is attribute
                 if attr_name not in self.secret:
                     response['attributes'][attr_name] = getattr(self, attr_name)
 
@@ -100,36 +101,36 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                     'self': '{base_url}/{type}/{id}/relationships/{attr_name}'.format(
                                                                                     base_url=base_url,
                                                                                     type=self.type,
-                                                                                    id=self.id,
+                                                                                    id=self.id.encode('utf-8'),
                                                                                     attr_name=attr_name),
                     'related': '{base_url}/{type}/{id}/{attr_name}'.format(
                                                                 base_url=base_url,
                                                                 type=self.type,
-                                                                id=self.id,
+                                                                id=self.id.encode('utf-8'),
                                                                 attr_name=attr_name)
                 }
 
                 # data
                 related_node_or_nodes = eval('self.{attr_name}.all()'.format(attr_name=attr_name))
 
-
-                if not eval("type(self.{related_collection_type})".format(related_collection_type=attr_name)) == ZeroOrOne:
-                    response['relationships'][attr_name]['data'] = list()
-                    for the_node in related_node_or_nodes:
-                        if the_node.active:
-                            # TODO: Decide whether or not to include relationship meta info
-                            # x = getattr(self, attr_name)
-                            # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
-                            rsrc_identifier = {'id': the_node.id, 'type': the_node.type}
-                            response['relationships'][attr_name]['data'].append(rsrc_identifier)
-                elif related_node_or_nodes:
-                    the_node = related_node_or_nodes[0]
-                    # x = getattr(self, attr_name)
-                    # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
-                    rsrc_identifier = {'type': the_node.type, 'id': the_node.id}
-                    response['relationships'][attr_name]['data'] = rsrc_identifier
-                else:
-                    response['relationships'][attr_name]['data'] = None
+                if include_relationship_info:
+                    if not eval("type(self.{related_collection_type})".format(related_collection_type=attr_name)) == ZeroOrOne:
+                        response['relationships'][attr_name]['data'] = list()
+                        for the_node in related_node_or_nodes:
+                            if the_node.active:
+                                # TODO: Decide whether or not to include relationship meta info
+                                # x = getattr(self, attr_name)
+                                # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
+                                rsrc_identifier = {'id': the_node.id, 'type': the_node.type}
+                                response['relationships'][attr_name]['data'].append(rsrc_identifier)
+                    elif related_node_or_nodes:
+                        the_node = related_node_or_nodes[0]
+                        # x = getattr(self, attr_name)
+                        # rsrc_identifier = x.relationship(the_node).get_resource_identifier_object(the_node)
+                        rsrc_identifier = {'type': the_node.type, 'id': the_node.id}
+                        response['relationships'][attr_name]['data'] = rsrc_identifier
+                    else:
+                        response['relationships'][attr_name]['data'] = None
 
         return response
 
@@ -470,7 +471,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         :return: An HTTP response object in accordance with the specification at \
         http://jsonapi.org/format/#fetching-resources
         """
-        print cls.get_collection_query(request_args)
+
         try:
             if request_args.get('include'):
                 raise ParameterNotSupported

@@ -10,7 +10,6 @@ class SerializableStructuredNodeBase(StructuredNode):
     NOTE: Currently this class is rather sparse, but I am going to gradually move methods from Serializable
     Structured node into this class, so that SSN will be more of an interface that shows off the public methods.
     """
-
     @classmethod
     def get_collection_query(cls, request_args):
         def create_argument_dictionary(request_args):
@@ -48,12 +47,10 @@ class SerializableStructuredNodeBase(StructuredNode):
 
         def create_filter_by_string(arg_dic):
             result = ''
-            print arg_dic
             if 'filter' in arg_dic:
                 for k in arg_dic['filter'].keys():
 
-                    gt, gte, lt, lte, et = [], [], [], [], []
-                    print arg_dic['filter'][k]
+                    gt, gte, lt, lte, et, like= [], [], [], [], [], []
                     for item in arg_dic['filter'][k]:
                         if not len(item):  # don't bother with an empty item
                             continue
@@ -67,6 +64,8 @@ class SerializableStructuredNodeBase(StructuredNode):
                                 lte.append(item[2:])
                             else:
                                 lt.append(item[1:])
+                        elif item[0] == '~':
+                            like.append(item[1:])
                         else:
                             et.append(item)
 
@@ -80,6 +79,8 @@ class SerializableStructuredNodeBase(StructuredNode):
                         result += ' AND n.{k} < {lt_i}'.format(k=k, lt_i=repr(lt_item.encode('utf8')))
                     for lte_item in lte:
                         result += 'AND n.{k} <= {lte_i}'.format(k=k, lte_i=repr(lte_item.encode('utf8')))
+                    for like_item in like:
+                        result += 'AND n.{k} STARTS WITH {like_i}'.format(k=k, like_i=repr(like_item.encode('utf8')))
             return result
 
         def create_return_string(arg_dic):
@@ -133,8 +134,9 @@ class SerializableStructuredNodeBase(StructuredNode):
         def get_offset_and_limit(arg_dic):
             o, l = 0, 20  # default
             if 'page' in arg_dic:
-                o = int(arg_dic['page'].get('offset', 0))
-                l = int(arg_dic['page'].get('limit', o+20))
+                o = int(arg_dic['page'].get('offset', [0])[0])
+                l = int(arg_dic['page'].get('limit', [o+20])[0])
+
             return o, l
 
         arg_dic = create_argument_dictionary(request_args)
