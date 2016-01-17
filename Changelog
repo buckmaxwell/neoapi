@@ -1,3 +1,9 @@
+Version 3.0.0 2015-12-18
+ * Turn around times for collection requests significantly increased
+ * Collection requests no longer include entity relationships by default
+ * Pagination links no no longer included, though pagination still works
+ * The pagination links will be added back in future versions
+
 Version 2.1.2 2015-12-18
  * Fixed bug in filtering
 
