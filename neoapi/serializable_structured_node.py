@@ -52,6 +52,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         include_rel_info = True
         data['data'] = self.get_resource_object(include_rel_info)
         data['links'] = {'self': self.get_self_link()}
+        print included
         data['included'] = self.get_included_from_list(included)
         r = make_response(jsonify(data))
         r.status_code = http_error_codes.OK
@@ -63,6 +64,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         if path:
             nodes = eval('self.{part}.all()'.format(part=path[0]))
             for n in nodes:
+                print n
                 if n.get_resource_object() not in response:
                     response.append(n.get_resource_object())
                 response += n.get_path_resources(path[1:])
@@ -92,12 +94,24 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                 if attr_name not in self.secret:
                     response['attributes'][attr_name] = getattr(self, attr_name)
 
+            elif not include_relationship_info:
+                related_resources = getattr(self, attr_name)
+                dn = related_resources.definition['model'].default['name']  # TODO: will throw error if model undefined
+                l = [getattr(x, dn) for x in related_resources]
+                if related_resources.definition['model'].default['size']:
+                    l = len(l)
+                response['attributes'][attr_name] = l
+
             elif include_relationship_info:  # is relationship
-                response['relationships'] = dict()
+                if 'relationships' not in response:
+                    response['relationships'] = dict()
                 response['relationships'][attr_name] = dict()
 
                 # links
+
                 response['relationships'][attr_name]['links'] = {
+
+
                     'self': '{base_url}/{type}/{id}/relationships/{attr_name}'.format(
                                                                                     base_url=base_url,
                                                                                     type=self.type,
@@ -1103,6 +1117,7 @@ class SerializableStructuredRel(StructuredRel):
     updated = DateTimeProperty(default=datetime.now())
     created = DateTimeProperty(default=datetime.now())
     type = StringProperty(default="serializable_structured_rel")
+    default = dict(name='id', size=False)
 
     def get_resource_identifier_object(self, end_node):
         try:

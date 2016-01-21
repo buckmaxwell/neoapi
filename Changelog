@@ -1,3 +1,6 @@
+Version 3.1.0 2015-21-16
+ * Added ability to change the default attribute returned in collection requests when a full attribute representation is not required
+
 Version 3.0.0 2015-12-18
  * Turn around times for collection requests significantly increased
  * Collection requests no longer include entity relationships by default
