@@ -50,7 +50,7 @@ class SerializableStructuredNodeBase(StructuredNode):
             if 'filter' in arg_dic:
                 for k in arg_dic['filter'].keys():
 
-                    gt, gte, lt, lte, et, like= [], [], [], [], [], []
+                    gt, gte, lt, lte, et, like = [], [], [], [], [], []
                     for item in arg_dic['filter'][k]:
                         if not len(item):  # don't bother with an empty item
                             continue
@@ -83,20 +83,32 @@ class SerializableStructuredNodeBase(StructuredNode):
                         result += 'AND n.{k} STARTS WITH {like_i}'.format(k=k, like_i=repr(like_item.encode('utf8')))
             return result
 
-        def create_return_string(arg_dic):
-            result = 'RETURN distinct(n)'  # => default
+        def create_return_or_with_string(arg_dic, wth=False):
+            if wth:
+                return_or_with = "WITH"
+            else:
+                return_or_with = "RETURN"
+
+            # result = '{rw} distinct(n)'.format(rw=return_or_with)  # => default
+            returning = set()
             if 'sort' in arg_dic:
-                result = 'RETURN '
                 for i, x in enumerate(arg_dic['sort']):
                     if len(x.split('func(')) == 2:  # grab function if it is a function
                         the_function = x.split('func(')[1].strip(')')
+                        nick_name = 'fn{i}'.format(i=i)
                         if the_function[0] == '-':
-                            result += '{fv}'.format(fv=getattr(cls, the_function[1:])['ret'])
+
+                            returning.add('{fv} as {nn}'.format(fv=getattr(cls, the_function[1:])['ret'],
+                                                            nn=nick_name))
                         else:
-                            result += '{fv}'.format(fv=getattr(cls, the_function)['ret'])
-                        if i != len(arg_dic['sort'])-1:
-                            result += ', '
-            return result
+                            returning.add('{fv} as {nn}'.format(fv=getattr(cls, the_function)['ret'],
+                                                            nn=nick_name))
+
+            res = '{rw} n'.format(rw=return_or_with)
+            for x in returning:
+                res += ', {x}'.format(x=x)
+
+            return res
 
         def create_secondary_match(arg_dic):
             result = ''  # => default
@@ -117,10 +129,11 @@ class SerializableStructuredNodeBase(StructuredNode):
                 for i, x in enumerate(arg_dic['sort']):
                     if len(x.split('func(')) == 2:  # grab function if it is a function
                         the_function = x.split('func(')[1].strip(')')
+                        nick_name = 'fn{i}'.format(i=i)
                         if the_function[0] == '-':
-                            result += '{fv} DESC'.format(fv=getattr(cls, the_function[1:])['order_by'])
+                            result += '{fv} DESC'.format(fv=nick_name)
                         else:
-                            result += '{fv}'.format(fv=getattr(cls, the_function)['order_by'])
+                            result += '{fv}'.format(fv=nick_name)
 
                     elif x[0] == '-':
                         result += 'n.{x} DESC'.format(x=x[1:])
@@ -139,11 +152,26 @@ class SerializableStructuredNodeBase(StructuredNode):
 
             return o, l
 
+        def get_include_string(arg_dic):
+            result = ""
+            if 'include' in arg_dic:
+                result = "MATCH (n)--(m) WHERE "
+                for i, inc in enumerate(arg_dic['include']):
+                    #the_cls = cls.get_class_from_type(inc).__name__
+                    rel_def = getattr(cls, inc)
+                    the_cls = rel_def.definition['node_class'].__name__
+                    if i != len(arg_dic['include'])-1:
+                        result += 'm:{label} OR '.format(label=the_cls)
+                    else:
+                        result += 'm:{label}'.format(label=the_cls)
+            return result
+
         arg_dic = create_argument_dictionary(request_args)
         filter_string = create_filter_by_string(arg_dic)
         order_by_string = create_order_by_string(cls, arg_dic)
         secondary_match = create_secondary_match(arg_dic)
-        return_string = create_return_string(arg_dic)
+        return_string = create_return_or_with_string(arg_dic)
+        with_string = create_return_or_with_string(arg_dic, True)
         offset, limit = get_offset_and_limit(arg_dic)
 
         query = """
@@ -160,7 +188,41 @@ class SerializableStructuredNodeBase(StructuredNode):
             order_by_string=order_by_string
         )
 
-        return query
+        include_string = get_include_string(arg_dic)
+
+        included_query = None
+        if 'include' in arg_dic:
+            included_query = """
+            MATCH (n) WHERE n:{label}
+            AND n.active {filter_string}
+            {secondary_match}
+            {with_string}
+            {order_by_string}
+            WITH n as n SKIP {offset} LIMIT {limit}
+            {include_string}
+            RETURN distinct(m)
+            """.format(
+                label=cls.__name__,
+                offset=offset,
+                limit=limit,
+                with_string=with_string,
+                order_by_string=order_by_string,
+                secondary_match=secondary_match,
+                return_string=return_string,
+                filter_string=filter_string,
+                include_string=include_string
+            )
+
+        result = dict(query=query, included_query=included_query)
+
+        return result
+
+    @classmethod
+    def get_class_from_type(cls, the_type):
+        for the_cls in cls.__base__.__subclasses__():
+            if the_cls.__type__ == the_type:
+                return the_cls
+        return None
 
 
 
