@@ -1,7 +1,13 @@
-Version 3.2.0 2015-22-16
+Version 3.2.2 2015-4-2
+ * Fixed issue where relationships were not present on individual resource requests.
+
+Version 3.2.1 2016-25-1
+ * Fixed issue that made it impossible to sort on attributes and functions at the same time
+
+Version 3.2.0 2016-22-1
  * Added ability to use the include paramater from the json api spec on collection requests
 
-Version 3.1.0 2015-21-16
+Version 3.1.0 2016-21-1
  * Added ability to change the default attribute returned in collection requests when a full attribute representation is not required
 
 Version 3.0.0 2015-12-18

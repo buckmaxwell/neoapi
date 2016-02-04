@@ -10,6 +10,7 @@ class SerializableStructuredNodeBase(StructuredNode):
     NOTE: Currently this class is rather sparse, but I am going to gradually move methods from Serializable
     Structured node into this class, so that SSN will be more of an interface that shows off the public methods.
     """
+
     @classmethod
     def get_collection_query(cls, request_args):
         def create_argument_dictionary(request_args):

@@ -48,6 +48,11 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         return cls.get_collection(request_args)
 
     def individual_resource_response(self, included=[]):
+        """
+        Depreciated.  Use get resource object
+        :param included:
+        :return:
+        """
         data = dict()
         include_rel_info = True
         data['data'] = self.get_resource_object()
@@ -476,41 +481,6 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
             data['data'] = list()
             data['included'] = list()
 
-
-            # TODO: PROVIDING PAGINATION LINKS WAS TOO SLOW.  REMOVE FOR NOW.  REQUESTING PAGINATION STILL WORKS
-            """
-            data['links']['self'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-                class_link=cls.get_class_link(),
-                offset=offset,
-                limit=limit
-            )
-
-            data['links']['first'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-                class_link=cls.get_class_link(),
-                offset=0,
-                limit=limit
-            )
-
-            if int(offset) - int(limit) > 0:
-                data['links']['prev'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-                    class_link=cls.get_class_link(),
-                    offset=int(offset)-int(limit),
-                    limit=limit
-                )
-
-            if len(cls.nodes) > int(offset) + int(limit):
-                data['links']['next'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-                    class_link=cls.get_class_link(),
-                    offset=int(offset)+int(limit),
-                    limit=limit
-                )
-
-            data['links']['last'] = "{class_link}?page[offset]={offset}&page[limit]={limit}".format(
-                class_link=cls.get_class_link(),
-                offset=len(cls.nodes.filter(active=True)) - (len(cls.nodes.filter(active=True)) % int(limit))-1,
-                limit=limit
-            )"""
-
             list_of_nodes = [cls.inflate(row[0]) for row in results]
             # We must inflate to the correct type
             list_of_included = []
@@ -547,12 +517,11 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         try:
             this_resource = cls.nodes.get(id=id, active=True)
 
-            try:
-                included = request_args.get('include').split(',')
-            except AttributeError:
-                included = []
+            included = request_args.get('include', [])
+            if included:
+                included = included.split(',')
 
-            r = this_resource.individual_resource_response(included)
+            r = this_resource.get_resource_object(included)
         except DoesNotExist:
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
 
