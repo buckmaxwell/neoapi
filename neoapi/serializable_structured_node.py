@@ -57,7 +57,6 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         include_rel_info = True
         data['data'] = self.get_resource_object()
         data['links'] = {'self': self.get_self_link()}
-        print included
         data['included'] = self.get_included_from_list(included)
         r = make_response(jsonify(data))
         r.status_code = http_error_codes.OK
@@ -514,6 +513,9 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         :return: The query parameters supplied with the request.  currently supports include.  See \
         http://jsonapi.org/format/#fetching-includes
         """
+        data = dict()
+        data['data'] = None
+        data['included'] = list()
         try:
             this_resource = cls.nodes.get(id=id, active=True)
 
@@ -521,7 +523,11 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
             if included:
                 included = included.split(',')
 
-            r = this_resource.get_resource_object(included)
+            data['data'] = this_resource.get_resource_object(included)
+            data['included'] = this_resource.get_included_from_list(included)
+            r = make_response(jsonify(data))
+            r.status_code = http_error_codes.OK
+            r.headers['Content-Type'] = CONTENT_TYPE
         except DoesNotExist:
             r = application_codes.error_response([application_codes.RESOURCE_NOT_FOUND])
 

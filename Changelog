@@ -1,3 +1,6 @@
+Version 3.2.3 2015-4-2
+ * Bug fixes for previous version
+
 Version 3.2.2 2015-4-2
  * Fixed issue where relationships were not present on individual resource requests.
 
