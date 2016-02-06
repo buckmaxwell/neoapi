@@ -1,7 +1,10 @@
-Version 3.2.3 2015-4-2
+Version 3.3.0 2016-6-2
+ * Added support for supplying an include parameter to the create_resource method
+
+Version 3.2.3 2016-4-2
  * Bug fixes for previous version
 
-Version 3.2.2 2015-4-2
+Version 3.2.2 2016-4-2
  * Fixed issue where relationships were not present on individual resource requests.
 
 Version 3.2.1 2016-25-1

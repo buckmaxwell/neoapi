@@ -519,7 +519,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         try:
             this_resource = cls.nodes.get(id=id, active=True)
 
-            included = request_args.get('include', [])
+            included = request_args.get('include', '')
             if included:
                 included = included.split(',')
 
@@ -567,7 +567,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         return r
 
     @classmethod
-    def create_resource(cls, request_json):
+    def create_resource(cls, request_json, request_args={}):
         r"""
         Used to create a node in the database of type 'cls' in response to a POST request. create_resource should only \
         be invoked on a resource when the client specifies a POST request.
@@ -639,8 +639,12 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                             )
                             new_resource.save()
 
-            response['data'] = new_resource.get_resource_object()
-            response['links'] = {'self': new_resource.get_self_link()}
+            included = request_args.get('include', '')
+            if included:
+                included = included.split(',')
+
+            response['data'] = new_resource.get_resource_object(included)
+            response['included'] = new_resource.get_included_from_list(included)
             status_code = http_error_codes.CREATED
             location = new_resource.get_self_link()
 
