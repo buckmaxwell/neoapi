@@ -3,6 +3,7 @@ from neomodel import (Property, StructuredNode, StringProperty, DateProperty, Al
                       DeflateError, One, ZeroOrMore, OneOrMore, AttemptedCardinalityViolation, MultipleNodesReturned,
                       StructuredRel)
 from py2neo.cypher.error.statement import ParameterMissing
+from function_property import  FunctionProperty
 import os
 import http_error_codes
 from flask import jsonify, make_response
@@ -99,9 +100,11 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         props = self.defined_properties()
         for attr_name in props.keys():
             if isinstance(props[attr_name], Property):  # is attribute
-                if attr_name not in self.secret:
-                    response['attributes'][attr_name] = getattr(self, attr_name)
+                if isinstance(props[attr_name], FunctionProperty):
+                    response['attributes'][attr_name] = eval(getattr(self, attr_name))
 
+                elif attr_name not in self.secret:
+                    response['attributes'][attr_name] = getattr(self, attr_name)
             elif attr_name in included:
                 if 'relationships' not in response:
                     response['relationships'] = dict()

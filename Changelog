@@ -1,3 +1,6 @@
+Version 3.4.0 2016-3-3
+ * Added support for FunctionProperty.  This is experimental and should be used with caution
+
 Version 3.3.0 2016-6-2
  * Added support for supplying an include parameter to the create_resource method
 

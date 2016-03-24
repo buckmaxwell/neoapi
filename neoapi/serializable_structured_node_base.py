@@ -118,9 +118,15 @@ class SerializableStructuredNodeBase(StructuredNode):
                     if len(x.split('func(')) == 2:  # grab function if it is a function
                         the_function = x.split('func(')[1].strip(')')
                         if the_function[0] == '-':
-                            result += 'OPTIONAL MATCH {fv} '.format(fv=getattr(cls, the_function[1:])['match'])
+                            if not hasattr(cls, the_function)['hard_match']:
+                                result += 'OPTIONAL MATCH {fv} '.format(fv=getattr(cls, the_function[1:])['match'])
+                            else:
+                                result += 'MATCH {fv} '.format(fv=getattr(cls, the_function[1:])['hard_match'])
                         else:
-                            result += 'OPTIONAL MATCH {fv} '.format(fv=getattr(cls, the_function)['match'])
+                            if not hasattr(cls, the_function)['hard_match']:
+                                result += 'OPTIONAL MATCH {fv} '.format(fv=getattr(cls, the_function)['match'])
+                            else:
+                                result += 'MATCH {fv} '.format(fv=getattr(cls, the_function)['hard_match'])
             return result
 
         def create_order_by_string(cls, arg_dic):
