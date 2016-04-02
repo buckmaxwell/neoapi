@@ -71,7 +71,10 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
             for n in nodes:
                 print n
                 if n.get_resource_object() not in response:
-                    response.append(n.get_resource_object())
+                    included = []
+                    if len(path) > 1:
+                        included.append(path[1])
+                    response.append(n.get_resource_object(included))
                 response += n.get_path_resources(path[1:])
 
         return response
@@ -96,7 +99,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
         response = dict(id=self.id,
                         type=self.type,
                         attributes=dict())
-
+        included = [x.split('.')[0] for x in included]
         props = self.defined_properties()
         for attr_name in props.keys():
             if isinstance(props[attr_name], Property):  # is attribute
