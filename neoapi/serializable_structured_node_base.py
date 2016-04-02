@@ -118,7 +118,7 @@ class SerializableStructuredNodeBase(StructuredNode):
                     if len(x.split('func(')) == 2:  # grab function if it is a function
                         the_function = x.split('func(')[1].strip(')')
                         if the_function[0] == '-':
-                            if not getattr(cls, the_function).get('hard_match', None):
+                            if not getattr(cls, the_function[1:]).get('hard_match', None):
                                 result += 'OPTIONAL MATCH {fv} '.format(fv=getattr(cls, the_function[1:])['match'])
                             else:
                                 result += 'MATCH {fv} '.format(fv=getattr(cls, the_function[1:])['hard_match'])

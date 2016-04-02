@@ -727,7 +727,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
 
                 for x in attributes.keys():
                     if x in cls.dates:
-                        if x:
+                        if attributes[x]:
                             dt = datetime.strptime(attributes[x], '%Y-%m-%d')
                             attributes[x] = dt
                         else:
