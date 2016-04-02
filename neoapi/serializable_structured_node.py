@@ -727,8 +727,12 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
 
                 for x in attributes.keys():
                     if x in cls.dates:
-                        dt = datetime.strptime(attributes[x], '%Y-%m-%d')
-                        attributes[x] = dt
+                        if x:
+                            dt = datetime.strptime(attributes[x], '%Y-%m-%d')
+                            attributes[x] = dt
+                        else:
+                            dt = None
+                            attributes[x] = None
 
                 this_resource.updated = datetime.now()
 
