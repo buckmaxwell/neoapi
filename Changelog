@@ -1,3 +1,9 @@
+Version 3.6.2 2015-4-4
+ * use of dot notation in the includes header used to cause repeats in the includes section of the response.  It should not anymore.
+
+Version 3.6.1 2015-2-4
+ * Better support for dot notation
+
 Version 3.6.0 2016-2-4
  * Better support for dot notation
 

@@ -13,6 +13,7 @@ from .errors import WrongTypeError, ParameterNotSupported
 from datetime import datetime
 import hashlib
 from serializable_structured_node_base import SerializableStructuredNodeBase
+import neo_utils
 
 base_url = os.environ.get('BASE_API_URL', 'http://localhost:10200/v1')
 CONTENT_TYPE = "application/vnd.api+json; charset=utf-8"
@@ -88,6 +89,18 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                 for path in included:
                     if attr_name == path[0]:
                         response += self.get_path_resources(path)
+
+        # merge duplicates in response
+        try:
+            ids = set(['{t}_{i}'.format(i=d["id"], t=d["type"]) for d in response])
+            result = []
+
+            for id in ids:
+                dicts = [d for d in response if '{t}_{i}'.format(i=["id"],t=d["type"]) == id]
+                result.append(reduce(neo_utils.merge_dict, dicts))
+            response = result
+        except Exception as e:  # just use the regular dict (this should never happen)
+            pass
 
         return response
 
@@ -466,12 +479,17 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                 raise ParameterNotSupported
             '''
 
+
+
             offset = request_args.get('page[offset]', 0)
             limit = request_args.get('page[limit]', 20)
+
+            print request_args
 
             query_dic = cls.get_collection_query(request_args)
             print "main query"
             print query_dic['query']
+
 
             results, meta = db.cypher_query(query_dic['query'])
 
@@ -505,6 +523,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
             r = make_response(jsonify(data))
             r.status_code = http_error_codes.OK
             r.headers['Content-Type'] = CONTENT_TYPE
+
             return r
         except ParameterNotSupported:
             return application_codes.error_response([application_codes.PARAMETER_NOT_SUPPORTED_VIOLATION])
