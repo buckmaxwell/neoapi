@@ -96,7 +96,7 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
             result = []
 
             for id in ids:
-                dicts = [d for d in response if '{t}_{i}'.format(i=["id"],t=d["type"]) == id]
+                dicts = [d for d in response if '{t}_{i}'.format(i=d["id"], t=d["type"]) == id]
                 result.append(reduce(neo_utils.merge_dict, dicts))
             response = result
         except Exception as e:  # just use the regular dict (this should never happen)
