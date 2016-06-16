@@ -13,6 +13,10 @@ class SerializableStructuredNodeBase(StructuredNode):
 
     @classmethod
     def get_collection_query(cls, request_args):
+        """NOTE: Current implementation does not use py2neo injection prevention methods,
+        so there could be insecurities.
+        """
+
         def create_argument_dictionary(request_args):
             """
             This method takes request.args of format,

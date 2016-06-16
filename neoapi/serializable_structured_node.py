@@ -755,6 +755,9 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                         else:
                             dt = None
                             attributes[x] = None
+                    if x in cls.hashed:  # hash it if we need to
+                        if attributes[x]:
+                            attributes[x] = hashlib.sha256(attributes[x]).hexdigest()
 
                 this_resource.updated = datetime.now()
 
@@ -771,10 +774,10 @@ class SerializableStructuredNode(SerializableStructuredNodeBase):
                         setattr(this_resource, key, attributes[key])
                     this_resource.save()
 
-                for r in this_resource.hashed:
-                    unhashed = getattr(this_resource, r)
-                    setattr(this_resource, r, hashlib.sha256(unhashed).hexdigest())
-                    this_resource.save()
+                #for r in this_resource.hashed:
+                #    unhashed = getattr(this_resource, r)
+                #    setattr(this_resource, r, hashlib.sha256(unhashed).hexdigest())
+                #    this_resource.save()
 
             relationships = data.get('relationships')
             if relationships:
